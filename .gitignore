@@ -1,0 +1,13 @@
+keiconf.py
+__pycache__/
+*.pyc
+.DS_Store
+.vscode/
+env/
+venv/
+__pypackages__/
+.env
+logs/
+*logfile*
+scancache.json
+*.log

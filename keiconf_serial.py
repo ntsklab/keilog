@@ -1,4 +1,4 @@
-#/usr/bin/python3
+#!/usr/bin/python3
 # -*- coding: utf-8 -*-
 """シリアルポートから入力されるデータを読み込み、ファイルに記録する設定
 
@@ -46,5 +46,5 @@ worker_def = [
             'baudrate': baud_rate,
             'record_que': record_que,
         }
-    },
+    }
 ]

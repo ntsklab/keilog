@@ -1,4 +1,4 @@
-#/usr/bin/python3
+#!/usr/bin/python3
 # -*- coding: utf-8 -*-
 
 '''Bルート経由で電力情報を取得し、ファイルに記録すると同時に、サーバーにアップロードする設定
@@ -9,7 +9,7 @@ keiconf.py にリネームして使用
 import queue
 from keilib.uploader import HttpPostUploader
 from keilib.recorder import FileRecorder
-from keilib.broute   import BrouteReader
+from keilib.broute   import BrouteReader, WiSunRL7023
 
 
 # settings for FileRecorder
@@ -40,7 +40,7 @@ requests = [
     { 'epc':['D3','D7','E1'], 'cycle': 3600 },  # 係数(D3),有効桁数(D7),単位(E1),3600秒ごと
     { 'epc':['E7'], 'cycle': 10 },              # 瞬時電力(E7),10秒ごと
     { 'epc':['E0'], 'cycle': 300 },             # 積算電力量(E0),300秒ごと
-],
+]
 # definition fo worker objects
 
 worker_def = [
@@ -71,5 +71,5 @@ worker_def = [
             'requests': requests,
             'record_que': record_que,
         }
-    },
+    }
 ]
