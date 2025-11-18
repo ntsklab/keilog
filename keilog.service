@@ -1,0 +1,17 @@
+[Unit]
+Description=KeiLog service
+After=network.target
+
+[Service]
+Type=simple
+User=user
+Group=user
+WorkingDirectory=/opt/keilog
+ExecStart=/usr/bin/env python3 -u /opt/keilog/kei.py
+Restart=on-failure
+RestartSec=5
+Environment=PYTHONUNBUFFERED=1
+SyslogIdentifier=keilog-service
+
+[Install]
+WantedBy=multi-user.target

@@ -34,11 +34,10 @@ fname = os.path.basename(__file__).split('.')
 
 if debug:
     LOGLEVEL = logging.DEBUG
-    handler = logging.StreamHandler()
 else:
     LOGLEVEL = logging.INFO
-    LOGFILE = os.getcwd() + '/' + fname[0] + '.log'
-    handler = TimedRotatingFileHandler(LOGFILE, when='D', interval=1, backupCount=3)
+
+handler = logging.StreamHandler()
 
 # Set formatter in handler（ハンドラにフォーマッタをセット）
 formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')

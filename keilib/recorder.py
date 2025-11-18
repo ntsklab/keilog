@@ -20,8 +20,8 @@ class FileRecorder ( Worker ):
     """record_queからデータを取り出し、それをファイルに保存する。
 
     * 2つのファイルに保存する
-        - すべてのデータの記録: [YYYYMMDD]-[fnameBase].txt
-        - 10分ごとの平均を記録: sum[YYYYMMDD]-[fnameBase].txt
+        - すべてのデータの記録: log/[YYYYMMDD]-[fnameBase].txt
+        - 10分ごとの平均を記録: log/sum[YYYYMMDD]-[fnameBase].txt
         - ファイルは日毎に作成。ファイル名には日付の情報が含まれる
 
     * 保存に際して
@@ -91,7 +91,7 @@ class FileRecorder ( Worker ):
 
         if data != '':
             #filename = 'sum'+self.key01m[:8]+'-'+self.fileNameBase+'.txt'
-            filename = 'sum'+self.key10mPre[:8]+'-'+self.fileNameBase+'.txt'
+            filename = 'recorder/sum'+self.key10mPre[:8]+'-'+self.fileNameBase+'.txt'
             with open(filename, 'a') as f:
                 f.write(data)
 
@@ -127,7 +127,7 @@ class FileRecorder ( Worker ):
         self.sum10m[unit][sensor]['sum'] += value
         # ファイルへの書き出し（1行）
         linedata = self.date+' '+self.mytime+','+unit+','+sensor+','+str(round(value,4))+','+id+'\n'
-        filename = self.key01m[:8]+'-'+self.fileNameBase+'.txt'
+        filename = 'recorder/'+self.key01m[:8]+'-'+self.fileNameBase+'.txt'
 
         with open(filename, 'a') as f:
             f.write(linedata)
