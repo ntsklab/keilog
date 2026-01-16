@@ -1,0 +1,50 @@
+# Telegraf Configuration Example for keilog JsonHttpUploader
+#
+# This configuration receives JSON data from keilog's JsonHttpUploader
+# and forwards it to InfluxDB 2.x.
+#
+# JsonHttpUploader sends data in the following JSON format:
+# {
+#   "Timestamp": "2026/01/16 12:34:56",
+#   "UnitID": "BR",
+#   "SensorID": "E7",
+#   "Value": 2500.0,
+#   "DataID": "X"
+# }
+
+[agent]
+  interval = "10s"
+  round_interval = true
+  metric_batch_size = 1000
+  metric_buffer_limit = 10000
+  collection_jitter = "0s"
+  flush_interval = "10s"
+  flush_jitter = "0s"
+  debug = true
+  omit_hostname = true
+
+# HTTP listener to receive keilog JsonHttpUploader data
+[[inputs.http_listener_v2]]
+  service_address = ":8080"
+  path = "/smartmeter"
+  methods = ["POST"]
+  data_format = "json"
+  json_time_key = "Timestamp"
+  json_time_format = "2006/01/02 15:04:05"
+  tag_keys = ["UnitID", "SensorID", "DataID"]
+  name_override = "smartmeter"
+  tagexclude = ["host"]
+
+# Processor: rename Value field to value
+[[processors.rename]]
+  [[processors.rename.replace]]
+    field = "Value"
+    dest = "value"
+
+# Output to InfluxDB 2.x
+[[outputs.influxdb_v2]]
+  urls = ["http://influxdb2.smartmeter.svc.cluster.local:80"]
+  token = "any TOKEN"
+  organization = "home"
+  bucket = "smartmeter"
+  timeout = "5s"

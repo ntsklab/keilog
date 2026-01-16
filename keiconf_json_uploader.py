@@ -1,0 +1,76 @@
+#!/usr/bin/python3
+# -*- coding: utf-8 -*-
+
+'''Bルート経由で電力情報を取得し、ファイルに記録すると同時に、JSONフォーマットでHTTPサーバーにアップロードする設定
+
+keiconf.py にリネームして使用
+
+JsonHttpUploaderは、Telegraf http_listener_v2プラグインと互換性があります。
+'''
+
+import queue
+from keilib.json_uploader import JsonHttpUploader
+from keilib.recorder import FileRecorder
+from keilib.broute   import BrouteReader, WiSunRL7023
+
+
+# settings for FileRecorder
+record_que = queue.Queue(50)
+fname_base = 'mylogfile'
+
+# settings for JsonHttpUploader
+upload_que = queue.Queue(50)
+
+# Telegraf http_listener_v2のエンドポイント
+# 例: http://192.168.1.100:8080/smartmeter
+target_url = 'http://192.168.1.100:8080/smartmeter'
+
+# settings for BrouteReader
+broute_port = '/dev/serial/by-id/usb-FTDI_FT230X_Basic_UART_xxxxxxxx-if00-port0'
+broute_baudrate = 115200
+
+wisundev = WiSunRL7023 (
+                port=broute_port,
+                baud=broute_baudrate,
+                type=WiSunRL7023.IPS # Bルート専用タイプ
+                # type=WiSunRL7023.DSS # デュアルスタックタイプ
+            )
+
+broute_id = 'xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'
+broute_pwd = 'xxxxxxxxxxxx'
+requests = [
+    { 'epc':['D3','D7','E1'], 'cycle': 3600 },  # 係数(D3),有効桁数(D7),単位(E1),3600秒ごと
+    { 'epc':['E7'], 'cycle': 10 },              # 瞬時電力(E7),10秒ごと
+    { 'epc':['E0'], 'cycle': 300 },             # 積算電力量(E0),300秒ごと
+]
+# definition fo worker objects
+
+worker_def = [
+    {
+        'class': JsonHttpUploader,
+        'args': {
+            'upload_que': upload_que,
+            'target_url': target_url
+        }
+    },
+
+    {
+        'class': FileRecorder,
+        'args': {
+            'record_que': record_que,
+            'fname_base': fname_base,
+            'upload_que': upload_que
+        }
+    },
+
+    {
+        'class': BrouteReader,
+        'args': {
+            'wisundev': wisundev,
+            'broute_id': broute_id,
+            'broute_pwd': broute_pwd,
+            'requests': requests,
+            'record_que': record_que,
+        }
+    }
+]
