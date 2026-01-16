@@ -3,6 +3,8 @@
 ## 追加・変更点
 - systemd サービスの追加
 - ログ記録処理の変更
+- JsonHttpUploader追加
+- telegraf用設定例追加
 - 細かい修正
 
 以降はオリジナルのREADMEです。
