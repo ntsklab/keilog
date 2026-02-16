@@ -6,6 +6,8 @@
 - JsonHttpUploader追加
 - telegraf用設定例追加
 - 細かい修正
+- `.env` による設定値管理に対応（`keiconf.py`, `keiconf_broute.py`, `keiconf_serial.py`）
+- ECHONET EPC 定義を `keilib/echonet_epc.py` に集約し、受信EPCのRAW記録に対応
 
 以降はオリジナルのREADMEです。
   
@@ -61,6 +63,19 @@
 
 設定例:
 --------------------
+`.env.example` を `.env` にコピーし、環境に合わせて値を設定します。
+
+```sh
+cp .env.example .env
+```
+
+主要な設定値:
+
+- `BROUTE_PORT`, `BROUTE_BAUDRATE`, `WISUN_TYPE`, `BROUTE_ID`, `BROUTE_PASSWORD`
+- `BROUTE_REQUESTS`（JSON形式で取得EPCと周期を定義）
+- `BROUTE_RECORD_RAW_EPC`（`true` で受信EPCのRAW値を `EPC_RAW` センサーとして記録）
+- `UPLOAD_TARGET_URL`, `UPLOAD_KEY`, `LOKI_URL`, `LOKI_LABELS`
+
 （Bルートのみ記録する構成）
 ```python
 # keiconf.py
@@ -183,10 +198,15 @@ $ DEBUG=0 python3 kei.py
 [Value]     = 測定値（数値）
 [DataID]    = x（固定）
 ```
+`BROUTE_RECORD_RAW_EPC=true` の場合、受信した定義済みEPCについて
+`[SensorID]=[EPC]_RAW` というセンサー名でRAW値（16進文字列）も同時に保存されます。
+また、`keilib/echonet_epc.py` に低圧スマート電力量メータクラスとスーパークラスのEPC定義を収録しています。
+
 2.は1行に各センサーの10分ごとの平均値が記録されます。
 ```
 [YYYY/MM/DD hh:m0],[UnitID],[SensorID],[AverageValue]<改行>
 ```
+非数値の値（例: バージョン文字列、RAW値）は10分平均の対象外です。
 日付のフォーマットに秒がない点に注意です。
 
 参考:

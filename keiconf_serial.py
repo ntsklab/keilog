@@ -18,14 +18,18 @@ SerialReader:
 import queue
 from keilib.recorder import FileRecorder
 from keilib.serial   import SerialReader
+from keilib.envconf import load_dotenv, get_env_int, get_env_str
+
+
+load_dotenv()
 
 #スレッド間でデータを共有する Queue
-record_que    = queue.Queue(50)
+record_que    = queue.Queue(get_env_int('RECORD_QUEUE_SIZE', 50))
 # 保存するファイル名のベースを指定
-fname_base  = 'mylogfile'
+fname_base  = get_env_str('FNAME_BASE', 'mylogfile')
 # シリアルポート情報
-serial_port = '/dev/serial/by-id/usb-FTDI_FT232R_USB_UART_YYYYYYYY-if00-port0'
-baud_rate   = 115200
+serial_port = get_env_str('SERIAL_PORT', '/dev/serial/by-id/usb-FTDI_FT232R_USB_UART_YYYYYYYY-if00-port0')
+baud_rate   = get_env_int('SERIAL_BAUDRATE', 115200)
 
 # ここで指定したクラスインスタンスが作成され、スレッドで並列動作する
 # オブジェクト間で共有する queue を使って互いにデータを交換する

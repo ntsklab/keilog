@@ -54,7 +54,13 @@ class FileRecorder ( Worker ):
         super().__init__()
         self.fileNameBase = fname_base
         self.record_que = record_que
-        self.upload_que = upload_que
+        # allow single Queue or iterable of Queues for fan-out uploads
+        if upload_que is None:
+            self.upload_queues = []
+        elif isinstance(upload_que, (list, tuple)):
+            self.upload_queues = [q for q in upload_que if q is not None]
+        else:
+            self.upload_queues = [upload_que]
         self.disp_que = disp_que
 
         self.sum10m = {}
@@ -95,11 +101,11 @@ class FileRecorder ( Worker ):
             with open(filename, 'a') as f:
                 f.write(data)
 
-            if self.upload_que is not None:
+            for q in self.upload_queues:
                 try:
-                    self.upload_que.put([filename, data], block=False)
+                    q.put([filename, data], block=False)
                 except:
-                    #print ('upload queue is full')
+                    # print('upload queue is full')
                     pass
 
         self.sum10m = {}
@@ -119,14 +125,28 @@ class FileRecorder ( Worker ):
             [timestamp],[unit],[sensor],[value],[id]
         """
         #print(self.disp_que)
-        if unit not in self.sum10m:
-            self.sum10m[unit] = {}
-        if sensor not in self.sum10m[unit]:
-            self.sum10m[unit][sensor] = {'count':0, 'sum':0.0}
-        self.sum10m[unit][sensor]['count'] += 1
-        self.sum10m[unit][sensor]['sum'] += value
+        numeric_value = None
+        if isinstance(value, (int, float)):
+            numeric_value = float(value)
+        else:
+            try:
+                numeric_value = float(value)
+            except:
+                numeric_value = None
+
+        if numeric_value is not None:
+            if unit not in self.sum10m:
+                self.sum10m[unit] = {}
+            if sensor not in self.sum10m[unit]:
+                self.sum10m[unit][sensor] = {'count':0, 'sum':0.0}
+            self.sum10m[unit][sensor]['count'] += 1
+            self.sum10m[unit][sensor]['sum'] += numeric_value
         # ファイルへの書き出し（1行）
-        linedata = self.date+' '+self.mytime+','+unit+','+sensor+','+str(round(value,4))+','+id+'\n'
+        if numeric_value is None:
+            output_value = str(value)
+        else:
+            output_value = str(round(numeric_value,4))
+        linedata = self.date+' '+self.mytime+','+unit+','+sensor+','+output_value+','+id+'\n'
         filename = 'recorder/'+self.key01m[:8]+'-'+self.fileNameBase+'.txt'
 
         with open(filename, 'a') as f:

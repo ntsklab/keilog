@@ -14,6 +14,7 @@ import queue
 from abc import ABCMeta, abstractmethod
 
 from keilib.worker import Worker
+from keilib.echonet_epc import EPC_DEFINITIONS
 
 from logging import getLogger, StreamHandler, DEBUG
 logger = getLogger(__name__)
@@ -1015,7 +1016,7 @@ class BrouteReader ( Worker ):
     """
 
 #    def __init__( self , port, baudrate, broute_id, broute_pwd, requests=[], record_que=None ):
-    def __init__( self , wisundev, broute_id, broute_pwd, requests=[], record_que=None ):
+    def __init__( self , wisundev, broute_id, broute_pwd, requests=[], record_que=None, record_raw_epc=True ):
         """コンストラクタ
 
         引数:
@@ -1029,6 +1030,7 @@ class BrouteReader ( Worker ):
         super().__init__()
 
         self.record_que = record_que
+        self.record_raw_epc = record_raw_epc
         self.broute_id = broute_id
         self.broute_pwd = broute_pwd
         if not requests:
@@ -1039,6 +1041,7 @@ class BrouteReader ( Worker ):
                 { 'epc':['E0'], 'cycle': 120 }, # 積算電力量(E0)
             ]
         for req in requests:
+            req['epc'] = [str(epc).upper() for epc in req.get('epc', [])]
             req['lasttime'] = 0
         self.requests = requests
         #self.wisundev = WiSunRL7023DSS( port, baudrate )
@@ -1162,6 +1165,21 @@ class BrouteReader ( Worker ):
     def _receive ( self ):
         return self.wisundev.receive()
 
+    def _record(self, sensor, value, dataid='X'):
+        if self.record_que is None:
+            return
+        self.record_que.put(['BR', sensor, value, dataid])
+
+    def _record_raw_epc_value(self, epc, edt):
+        if self.record_raw_epc:
+            self._record(epc + '_RAW', edt)
+
+    def _epc_name(self, epc):
+        info = EPC_DEFINITIONS.get(epc)
+        if info is None:
+            return None
+        return info.get('name')
+
     def _accept( self, dataframe ):
         """受信した電文を受け付ける処理"""
 
@@ -1183,33 +1201,63 @@ class BrouteReader ( Worker ):
         if seoj == '028801' and esv in ['72','73']:
             # 送信元が '028801'（スマートメーター）で ESV が 72（プロパティ値要求の応答）
             for epc, edt in dataframe.properties.items():
-                if epc == 'E7': # 瞬時電力 E7
+                epc_name = self._epc_name(epc)
+
+                if epc == '80': # 動作状態
+                    if edt == '30':
+                        self._record('80', 1)
+                    elif edt == '31':
+                        self._record('80', 0)
+
+                elif epc == '82': # 規格Version情報
+                    if len(edt) >= 6:
+                        release_ch = chr(int(edt[4:6], 16))
+                        self._record('82', release_ch)
+
+                elif epc == '88': # 異常発生状態
+                    if edt == '41':
+                        self._record('88', 1)
+                    elif edt == '42':
+                        self._record('88', 0)
+
+                elif epc == '8A': # メーカコード
+                    self._record('8A', int(edt, 16))
+
+                elif epc == '97': # 現在時刻
+                    if len(edt) >= 4:
+                        self._record('97', '{:02}:{:02}'.format(int(edt[:2], 16), int(edt[2:4], 16)))
+
+                elif epc == '98': # 現在年月日
+                    if len(edt) >= 8:
+                        self._record('98', '{:04}-{:02}-{:02}'.format(int(edt[:4], 16), int(edt[4:6], 16), int(edt[6:8], 16)))
+
+                elif epc == 'E7': # 瞬時電力 E7
                     value = hex_to_signed_int(edt)
-                    self.record_que.put(['BR', epc, value, 'X'])
+                    self._record('E7', value)
 
                 elif epc == 'E8': # 瞬時電流計測値
                     rphase = edt[:4]
                     tphase = edt[4:]
                     rvalue = hex_to_signed_int(rphase) * 0.1 # アンペア
                     tvalue = hex_to_signed_int(tphase) * 0.1 # アンペア
-                    self.record_que.put(['BR', 'E8R', rvalue, 'X'])
-                    self.record_que.put(['BR', 'E8T', tvalue, 'X'])
+                    self._record('E8R', rvalue)
+                    self._record('E8T', tvalue)
 
                 elif epc in ['E0','E3']: # 積算電力量（正／負）
                     value = getvalue(edt)
-                    self.record_que.put(['BR', epc, value, 'X'])
+                    self._record(epc, value)
 
                 elif epc == 'D3': # 係数 coefficient D3
                     value = int(edt, 16)
                     self.coefficient = value
                     logger.debug('cofficient = ' + str(value))
-                    self.record_que.put(['BR', epc, value, 'X'])
+                    self._record('D3', value)
 
                 elif epc == 'D7': # 積算電力有効桁数 effective digits D7
                     value = int(edt, 16)
                     self.effective_digits = value
                     logger.debug('effective_digits = ' + str(value))
-                    self.record_que.put(['BR', epc, value, 'X'])
+                    self._record('D7', value)
 
                 elif epc == 'E1': # 積算電力単位 unit E1
                     value = int(edt, 16)
@@ -1232,18 +1280,41 @@ class BrouteReader ( Worker ):
                     elif value == 0x0D:
                         unit = 10000.0
                     else:
-                        value = 0.1
+                        unit = 0.1
                     self.unit = unit
                     logger.debug('unit = ' + str(self.unit))
-                    self.record_que.put(['BR','E1',value,'X'])
+                    self._record('E1', value)
+
+                elif epc == 'E5': # 積算履歴収集日1
+                    self._record('E5', int(edt, 16))
 
                 elif epc in ['EA', 'EB']: # 定時 積算電力量 計測値 (正方向,逆方向計測値)
                     value = getvalue(edt[14:])
+                    self._record(epc, value)
+                    self._record(epc + '_AT', datestr(edt[:14]))
                     logger.info(datestr(edt[:14]) + ' ' + epc + ' = ' + str(value))
-                    self.record_que.put(['BR', epc, value, 'X'])
+
+                elif epc == 'ED': # 積算履歴収集日2
+                    # YYYYMMDDhhmm + count
+                    if len(edt) >= 14:
+                        self._record('ED_COUNT', int(edt[12:14], 16))
+                        self._record('ED_AT', '{:04}-{:02}-{:02} {:02}:{:02}'.format(
+                            int(edt[0:4], 16), int(edt[4:6], 16), int(edt[6:8], 16), int(edt[8:10], 16), int(edt[10:12], 16)
+                        ))
+
+                elif epc in ['81', '83', '84', '85', '86', '87', '89', '8B', '8C', '8D', '8E', '8F',
+                             '93', '99', '9A', '9B', '9C', '9D', '9E', '9F', 'E2', 'E4', 'EC']:
+                    # 定義済みだが詳細解析は行わずRAWで記録
+                    pass
 
                 else:
                     logger.warning('unknown property:' + epc + ' value:' + edt)
+
+                # 仕様で定義されているEPCは raw 値も保持する
+                if epc in EPC_DEFINITIONS:
+                    self._record_raw_epc_value(epc, edt)
+                    if epc_name is not None:
+                        logger.debug('EPC %s (%s) = %s', epc, epc_name, edt)
 
         else:
             # スマートメーターからのプロパティ読み出し応答以外の電文を処理
