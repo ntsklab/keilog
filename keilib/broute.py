@@ -1204,6 +1204,8 @@ class BrouteReader ( Worker ):
 
         def getvalue(rawdata):
             value = int(rawdata, 16)
+            if self.effective_digits:
+                value = value % (10 ** self.effective_digits)
             return value * self.coefficient * self.unit
 
         def datestr(rawdata):
@@ -1214,6 +1216,32 @@ class BrouteReader ( Worker ):
             minute = int(rawdata[10:12],16)
             second = int(rawdata[12:14],16)
             return "{:0=4}/{:0=2}/{:0=2} {:0=2}:{:0=2}:{:0=2}".format(year,month,day,hour,minute,second)
+
+        def decode_ascii(rawdata):
+            raw = bytes.fromhex(rawdata)
+            return raw.split(b'\x00', 1)[0].decode('ascii', errors='ignore')
+
+        def decode_property_map(rawdata):
+            if len(rawdata) < 2:
+                return []
+            count = int(rawdata[:2], 16)
+            if count < 16:
+                epc_list = []
+                for i in range(count):
+                    base = 2 + i * 2
+                    if base + 2 <= len(rawdata):
+                        epc_list.append(rawdata[base:base + 2].upper())
+                return epc_list
+            if len(rawdata) < 2 + 32:
+                return []
+            epc_list = []
+            for byte_idx in range(16):
+                byte_val = int(rawdata[2 + byte_idx * 2: 2 + byte_idx * 2 + 2], 16)
+                for bit in range(8):
+                    if byte_val & (1 << bit):
+                        epc = 0x80 + byte_idx * 8 + bit
+                        epc_list.append('{:02X}'.format(epc))
+            return epc_list
 
         seoj = dataframe.seoj
         esv = dataframe.esv
@@ -1241,6 +1269,73 @@ class BrouteReader ( Worker ):
 
                 elif epc == '8A': # メーカコード
                     self._record('8A', int(edt, 16))
+
+                elif epc == '81': # 設置場所
+                    if len(edt) >= 2:
+                        loc = int(edt[:2], 16)
+                        area = (loc >> 3) & 0x0F
+                        number = loc & 0x07
+                        table = (loc >> 7) & 0x01
+                        self._record('81', loc)
+                        self._record('81_AREA', area)
+                        self._record('81_NO', number)
+                        self._record('81_TABLE', table)
+
+                elif epc == '83': # 識別番号
+                    if len(edt) >= 2:
+                        self._record('83_TYPE', int(edt[:2], 16))
+                        if len(edt) > 2:
+                            self._record('83_ID', edt[2:])
+
+                elif epc == '84': # 瞬時消費電力計測値
+                    if len(edt) >= 4:
+                        self._record('84', int(edt[:4], 16))
+
+                elif epc == '85': # 積算消費電力計測値 (0.001kWh)
+                    if len(edt) >= 8:
+                        self._record('85', int(edt[:8], 16) * 0.001)
+
+                elif epc == '86': # メーカ異常コード
+                    if len(edt) >= 2:
+                        self._record('86', edt)
+
+                elif epc == '87': # 電流制限設定
+                    if len(edt) >= 2:
+                        self._record('87', int(edt[:2], 16))
+
+                elif epc == '89': # 異常内容
+                    if len(edt) >= 2:
+                        self._record('89', edt)
+
+                elif epc == '8B': # 事業場コード
+                    if len(edt) >= 6:
+                        self._record('8B', int(edt[:6], 16))
+
+                elif epc == '8C': # 商品コード
+                    if len(edt) >= 2:
+                        self._record('8C', decode_ascii(edt))
+
+                elif epc == '8D': # 製造番号
+                    if len(edt) >= 2:
+                        self._record('8D', decode_ascii(edt))
+
+                elif epc == '8E': # 製造年月日
+                    if len(edt) >= 8:
+                        self._record('8E', '{:04}-{:02}-{:02}'.format(
+                            int(edt[:4], 16), int(edt[4:6], 16), int(edt[6:8], 16)
+                        ))
+
+                elif epc == '8F': # 節電動作設定
+                    if edt == '41':
+                        self._record('8F', 1)
+                    elif edt == '42':
+                        self._record('8F', 0)
+
+                elif epc == '93': # 遠隔操作設定
+                    if edt == '41':
+                        self._record('93', 0)
+                    elif edt == '42':
+                        self._record('93', 1)
 
                 elif epc == '97': # 現在時刻
                     if len(edt) >= 4:
@@ -1308,6 +1403,24 @@ class BrouteReader ( Worker ):
                 elif epc == 'E5': # 積算履歴収集日1
                     self._record('E5', int(edt, 16))
 
+                elif epc == '99': # 電力制限設定
+                    if len(edt) >= 4:
+                        self._record('99', int(edt[:4], 16))
+
+                elif epc == '9A': # 積算運転時間
+                    if len(edt) >= 10:
+                        unit_code = edt[:2]
+                        value = int(edt[2:10], 16)
+                        unit_map = {'41': 's', '42': 'min', '43': 'h', '44': 'd'}
+                        unit = unit_map.get(unit_code, unit_code)
+                        self._record('9A', value)
+                        self._record('9A_UNIT', unit)
+
+                elif epc in ['9B', '9C', '9D', '9E', '9F']: # プロパティマップ
+                    epc_list = decode_property_map(edt)
+                    if epc_list:
+                        self._record(epc, ','.join(epc_list))
+
                 elif epc in ['EA', 'EB']: # 定時 積算電力量 計測値 (正方向,逆方向計測値)
                     value = getvalue(edt[14:])
                     self._record(epc, value)
@@ -1322,8 +1435,7 @@ class BrouteReader ( Worker ):
                             int(edt[0:4], 16), int(edt[4:6], 16), int(edt[6:8], 16), int(edt[8:10], 16), int(edt[10:12], 16)
                         ))
 
-                elif epc in ['81', '83', '84', '85', '86', '87', '89', '8B', '8C', '8D', '8E', '8F',
-                             '93', '99', '9A', '9B', '9C', '9D', '9E', '9F', 'E2', 'E4', 'EC']:
+                elif epc in ['E2', 'E4', 'EC']:
                     # 定義済みだが詳細解析は行わずRAWで記録
                     pass
 

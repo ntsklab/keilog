@@ -11,3 +11,4 @@ logs/
 *logfile*
 scancache.json
 *.log
+aidoc/
