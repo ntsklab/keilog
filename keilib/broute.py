@@ -418,7 +418,7 @@ class WiSunRL7023 ( WiSunDevice ):
             True: 成功
             False: 失敗
         """
-        cmd = 'WOPT SFE 0\r\n'
+        cmd = 'SKSREG SFE 0\r\n'
         logger.debug(cmd.strip())
         self.ser.write(cmd.encode('ascii'))
         if self._wait_ok():
