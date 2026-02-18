@@ -24,12 +24,9 @@ from keilib.envconf import (
 load_dotenv()
 
 
-# settings for FileRecorder
-record_que = queue.Queue(get_env_int('RECORD_QUEUE_SIZE', 50))
+# shared queue (BrouteReader -> JsonHttpUploader)
+upload_que = queue.Queue(get_env_int('RECORD_QUEUE_SIZE', 50))
 fname_base = get_env_str('FNAME_BASE', 'mylogfile')
-
-# settings for JsonHttpUploader
-upload_que = queue.Queue(get_env_int('UPLOAD_QUEUE_SIZE', 50))
 
 # Telegraf http_listener_v2のエンドポイント
 # 例: http://192.168.1.100:8080/smartmeter
@@ -68,22 +65,13 @@ worker_def = [
     },
 
     {
-        'class': FileRecorder,
-        'args': {
-            'record_que': record_que,
-            'fname_base': fname_base,
-            'upload_que': upload_que
-        }
-    },
-
-    {
         'class': BrouteReader,
         'args': {
             'wisundev': wisundev,
             'broute_id': broute_id,
             'broute_pwd': broute_pwd,
             'requests': requests,
-            'record_que': record_que,
+            'record_que': upload_que,
             'record_raw_epc': broute_record_raw_epc,
         }
     }
