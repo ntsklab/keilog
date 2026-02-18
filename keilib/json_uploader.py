@@ -47,6 +47,21 @@ class JsonHttpUploader(Worker):
         except Exception:
             return str(value)
 
+    def _normalize_sensor_id(self, sensor_id):
+        s = str(sensor_id).strip()
+        if not s:
+            return s
+
+        parts = s.split('_')
+        normalized_parts = []
+        for part in parts:
+            p = part.strip()
+            if len(p) == 2 and all(ch in '0123456789abcdefABCDEF' for ch in p):
+                normalized_parts.append(p.upper())
+            else:
+                normalized_parts.append(p.upper())
+        return '_'.join(normalized_parts)
+
     def _normalize_timestamp(self, timestamp):
         local_tz = datetime.now().astimezone().tzinfo
         if timestamp is None:
@@ -122,7 +137,7 @@ class JsonHttpUploader(Worker):
                     payload = {
                         "Timestamp": self._normalize_timestamp(None),
                         "UnitID": str(data[0]),
-                        "SensorID": str(data[1]),
+                        "SensorID": self._normalize_sensor_id(data[1]),
                         "Value": self._normalize_value(data[2]),
                         "DataID": str(data[3])
                     }
@@ -131,7 +146,7 @@ class JsonHttpUploader(Worker):
                     payload = {
                         "Timestamp": self._normalize_timestamp(data[0]),
                         "UnitID": str(data[1]),
-                        "SensorID": str(data[2]),
+                        "SensorID": self._normalize_sensor_id(data[2]),
                         "Value": self._normalize_value(data[3]),
                         "DataID": str(data[4])
                     }

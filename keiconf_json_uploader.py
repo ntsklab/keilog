@@ -50,6 +50,7 @@ default_requests = [
     { 'epc':['D3','D7','E1'], 'cycle': 3600 },  # 係数(D3),有効桁数(D7),単位(E1),3600秒ごと
     { 'epc':['E7'], 'cycle': 10 },              # 瞬時電力(E7),10秒ごと
     { 'epc':['E0'], 'cycle': 300 },             # 積算電力量(E0),300秒ごと
+    { 'epc':['8D'], 'cycle': 86400 },           # 製造番号(8D),86400秒ごと
 ]
 requests = get_env_json('BROUTE_REQUESTS', default_requests)
 broute_record_raw_epc = get_env_bool('BROUTE_RECORD_RAW_EPC', True)

@@ -187,6 +187,7 @@ class WiSunRL7023 ( WiSunDevice ):
         self.type = type
         self.register = {}
         self.scanresult = {}
+        self._pending_erxudp_events = []
 
         self._TIMEOUT_MAX = 20
         self._TIMEOUT_SCAN = 300
@@ -775,9 +776,11 @@ class WiSunRL7023 ( WiSunDevice ):
                     # 空行は無視
                     pass
                 elif stripped[:6] == b'ERXUDP':
-                    # ERXUDPは別途receive()で処理されるので無視
+                    # sendto待機中に到着したERXUDPを捨てずにバッファしておく
                     logger.debug(res.decode('ascii').strip())
-                    pass
+                    event = self._parse_event(stripped)
+                    if event and event.get('NAME') == 'ERXUDP':
+                        self._pending_erxudp_events.append(event)
                 else:
                     # その他の応答（デバッグ用に出力）
                     logger.debug(res.decode('ascii').strip())
@@ -790,7 +793,10 @@ class WiSunRL7023 ( WiSunDevice ):
             スマートメーターからの電文に対応する DataFrame オブジェクト
         """
 
-        event = self._get_event()
+        if self._pending_erxudp_events:
+            event = self._pending_erxudp_events.pop(0)
+        else:
+            event = self._get_event()
 
         # 受信イベント処理
         if event:
@@ -1093,11 +1099,21 @@ class BrouteReader ( Worker ):
                 { 'epc':['D3','D7','E1'], 'cycle': 3600 }, # 係数(D3),有効桁数(D7),単位(E1)
                 { 'epc':['E7'], 'cycle': 10 }, # 瞬時電力(E7)
                 { 'epc':['E0'], 'cycle': 120 }, # 積算電力量(E0)
+                { 'epc':['8D'], 'cycle': 86400 }, # 製造番号(8D)
             ]
         for req in requests:
             req['epc'] = [str(epc).upper() for epc in req.get('epc', [])]
             req['lasttime'] = 0
         self.requests = requests
+        self.configured_requests = self._normalize_requests(self.requests)
+        self.requests = [
+            {
+                'epc': list(req.get('epc', [])),
+                'cycle': int(req.get('cycle', 0)),
+                'lasttime': float(req.get('lasttime', 0) or 0),
+            }
+            for req in self.configured_requests
+        ]
         self._load_request_profile_cache()
         #self.wisundev = WiSunRL7023DSS( port, baudrate )
         self.wisundev = wisundev
@@ -1282,7 +1298,20 @@ class BrouteReader ( Worker ):
                 return
             normalized = self._normalize_requests(cached_requests)
             if normalized:
-                self.requests = normalized
+                merged = list(normalized)
+                seen = set([(tuple(req['epc']), int(req['cycle'])) for req in merged])
+                for req in self.configured_requests:
+                    key = (tuple(req['epc']), int(req['cycle']))
+                    if key in seen:
+                        continue
+                    merged.append({
+                        'epc': list(req['epc']),
+                        'cycle': int(req['cycle']),
+                        'lasttime': 0,
+                    })
+                    seen.add(key)
+
+                self.requests = merged
                 logger.info('loaded request profile cache: %s', ' | '.join(['%s@%s' % (','.join(r['epc']), r['cycle']) for r in self.requests]))
         except Exception:
             pass
