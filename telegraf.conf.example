@@ -5,7 +5,7 @@
 #
 # JsonHttpUploader sends data in the following JSON format:
 # {
-#   "Timestamp": "2026/01/16 12:34:56",
+#   "Timestamp": "2026-02-18T14:13:41+09:00",
 #   "UnitID": "BR",
 #   "SensorID": "E7",
 #   "Value": 2500.0,
@@ -26,11 +26,11 @@
 # HTTP listener to receive keilog JsonHttpUploader data
 [[inputs.http_listener_v2]]
   service_address = ":8080"
-  path = "/smartmeter"
+  paths = ["/smartmeter"]
   methods = ["POST"]
   data_format = "json"
   json_time_key = "Timestamp"
-  json_time_format = "2006/01/02 15:04:05"
+  json_time_format = "2006-01-02T15:04:05Z07:00"
   tag_keys = ["UnitID", "SensorID", "DataID"]
   name_override = "smartmeter"
   tagexclude = ["host"]

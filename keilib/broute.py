@@ -733,7 +733,7 @@ class WiSunRL7023 ( WiSunDevice ):
                 return evt21
 
             else:
-                #logger.debug(res.decode('ascii').strip())
+                logger.debug(res.decode('ascii').strip())
                 logger.debug('unknown response')
 
     def receive( self ):
