@@ -759,8 +759,19 @@ class WiSunRL7023 ( WiSunDevice ):
                 return evt21
 
             else:
-                logger.debug(res.decode('ascii').strip())
-                logger.debug('unknown response')
+                # 空行やその他のイベントは読み飛ばす
+                stripped = res.strip()
+                if stripped == b'':
+                    # 空行は無視
+                    pass
+                elif stripped[:6] == b'ERXUDP':
+                    # ERXUDPは別途receive()で処理されるので無視
+                    logger.debug(res.decode('ascii').strip())
+                    pass
+                else:
+                    # その他の応答（デバッグ用に出力）
+                    logger.debug(res.decode('ascii').strip())
+                    logger.debug('unknown response (ignored)')
 
     def receive( self ):
         """スマートメーターからの電文を受信する
