@@ -1255,12 +1255,13 @@ class BrouteReader ( Worker ):
                     self._record('E7', value)
 
                 elif epc == 'E8': # 瞬時電流計測値
-                    rphase = edt[:4]
-                    tphase = edt[4:]
+                    rphase = edt[:4].upper()
+                    tphase = edt[4:8].upper()
                     rvalue = hex_to_signed_int(rphase) * 0.1 # アンペア
-                    tvalue = hex_to_signed_int(tphase) * 0.1 # アンペア
                     self._record('E8R', rvalue)
-                    self._record('E8T', tvalue)
+                    if tphase != '7FFE':
+                        tvalue = hex_to_signed_int(tphase) * 0.1 # アンペア
+                        self._record('E8T', tvalue)
 
                 elif epc in ['E0','E3']: # 積算電力量（正／負）
                     value = getvalue(edt)
