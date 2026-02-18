@@ -7,7 +7,7 @@ keiconf.py にリネームして使用
 '''
 
 import queue
-from keilib.uploader import HttpPostUploader, LokiUploader
+from keilib.uploader import HttpPostUploader
 from keilib.recorder import FileRecorder
 from keilib.broute   import BrouteReader, WiSunRL7023
 from keilib.envconf import (
@@ -28,15 +28,6 @@ fname_base = get_env_str('FNAME_BASE', 'mylogfile')
 
 # settings for HttpPostUploader
 upload_que = queue.Queue(get_env_int('UPLOAD_QUEUE_SIZE', 50))
-
-# settings for LokiUploader (push API)
-loki_que = queue.Queue(get_env_int('LOKI_QUEUE_SIZE', 200))
-loki_url = get_env_str('LOKI_URL', 'http://localhost:3100')
-loki_labels = get_env_json('LOKI_LABELS', {
-    'app': 'keilog',
-    'source': 'broute'
-})
-loki_tenant_id = get_env_str('LOKI_TENANT_ID', None)  # multi-tenant Lokiの場合に指定
 
 # upload.php のサンプルは php フォルダにある
 target_url = get_env_str('UPLOAD_TARGET_URL', 'https://example.com/upload.php')
@@ -71,7 +62,7 @@ worker_def = [
         'args': {
             'record_que': record_que,
             'fname_base': fname_base,
-            'upload_que': [upload_que, loki_que]
+            'upload_que': upload_que
         }
     },
 
@@ -81,16 +72,6 @@ worker_def = [
             'upload_que': upload_que,
             'target_url': target_url,
             'upload_key': upload_key
-        }
-    },
-
-    {
-        'class': LokiUploader,
-        'args': {
-            'upload_que': loki_que,
-            'loki_url': loki_url,
-            'base_labels': loki_labels,
-            'tenant_id': loki_tenant_id
         }
     },
 

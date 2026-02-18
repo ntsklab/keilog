@@ -8,10 +8,6 @@
 - 細かい修正
 - `.env` による設定値管理に対応（`keiconf.py`, `keiconf_broute.py`, `keiconf_serial.py`）
 - ECHONET EPC 定義を `keilib/echonet_epc.py` に集約し、受信EPCのRAW記録に対応
-
-以降はオリジナルのREADMEです。
-  
-  
   
 スマートメーター＆計測ロガー
 ====================
@@ -74,7 +70,7 @@ cp .env.example .env
 - `BROUTE_PORT`, `BROUTE_BAUDRATE`, `WISUN_TYPE`, `BROUTE_ID`, `BROUTE_PASSWORD`
 - `BROUTE_REQUESTS`（JSON形式で取得EPCと周期を定義）
 - `BROUTE_RECORD_RAW_EPC`（`true` で受信EPCのRAW値を `EPC_RAW` センサーとして記録）
-- `UPLOAD_TARGET_URL`, `UPLOAD_KEY`, `LOKI_URL`, `LOKI_LABELS`
+- `UPLOAD_TARGET_URL`, `UPLOAD_KEY`
 
 （Bルートのみ記録する構成）
 ```python
