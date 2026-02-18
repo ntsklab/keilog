@@ -626,7 +626,7 @@ class WiSunRL7023 ( WiSunDevice ):
             cmd = 'SKLL64 ' + self.scanresult['Addr'] + '\r\n'
             logger.info(cmd.strip())
             self.ser.write(cmd.encode('ascii'))
-            self.ser.readline() #エコーバック読み飛ばし
+            # エコーバックは無効化済みなので読み飛ばし不要
             self.ipv6_addr = self.ser.readline().strip().decode('ascii')
             logger.info('IP_ADDR = ' + self.ipv6_addr)
 
@@ -680,6 +680,15 @@ class WiSunRL7023 ( WiSunDevice ):
                 elif event['NAME'] == 'ERXUDP':
                     logger.info('ERXUDP')
                     logger.debug(event)
+
+                elif event['NAME'] == 'OTHER_EVENT':
+                    # FAIL イベントの場合は即座に失敗を返す
+                    if event.get('LIST') and len(event['LIST']) > 0 and event['LIST'][0] == 'FAIL':
+                        logger.error('SKJOIN FAIL: ' + str(event))
+                        return False
+                    else:
+                        logger.info(event)
+                        pass
 
                 else:
                     logger.info(event)
