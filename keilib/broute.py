@@ -412,6 +412,22 @@ class WiSunRL7023 ( WiSunDevice ):
         else:
             return False
 
+    def _disable_echo_back( self ):
+        """デバイスのエコーバック機能を無効化する
+        戻り値:
+            True: 成功
+            False: 失敗
+        """
+        cmd = 'WOPT SFE 0\r\n'
+        logger.debug(cmd.strip())
+        self.ser.write(cmd.encode('ascii'))
+        if self._wait_ok():
+            logger.info('Echo back disabled')
+            return True
+        else:
+            logger.warning('Failed to disable echo back')
+            return False
+
     def _get_registers( self ):
         """デバイスのレジスタの値を読み出して記憶する。"""
         for key, description in sorted(reginfo.items()):
@@ -576,7 +592,8 @@ class WiSunRL7023 ( WiSunDevice ):
         """
         r1 = self._set_password(password)
         r2 = self._set_id(id)
-        if r1 and r2:
+        r3 = self._disable_echo_back()
+        if r1 and r2 and r3:
             return True
         else:
             return False
