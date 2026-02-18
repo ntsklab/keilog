@@ -155,7 +155,7 @@ class JsonHttpUploader(Worker):
                 self._log_http_response('POST', self.target_url, response)
 
                 if response.status_code in [200, 204]:
-                    logger.info('POST success: SensorID=%s Value=%s', payload['SensorID'], payload['Value'])
+                    logger.debug('POST success: SensorID=%s Value=%s', payload['SensorID'], payload['Value'])
                 else:
                     logger.warning('POST failed: status=%d', response.status_code)
 

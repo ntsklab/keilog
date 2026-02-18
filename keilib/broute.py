@@ -1184,7 +1184,7 @@ class BrouteReader ( Worker ):
                     qsize = self.record_que.qsize()
                 except Exception:
                     qsize = -1
-                logger.warning('record enqueue ok: sensor=%s qsize=%s', sensor, qsize)
+                logger.debug('record enqueue ok: sensor=%s qsize=%s', sensor, qsize)
                 self._last_record_log = now
         except queue.Full:
             logger.error('record queue is full, drop data: sensor=%s dataid=%s', sensor, dataid)
@@ -1453,8 +1453,8 @@ class BrouteReader ( Worker ):
             # ESV=73 プロパティ値通知も定期的に受信している
             #   EPC=EA:定時 積算電力量 計測値 (正方向計測値)
             #   EPC=EB:定時 積算電力量 計測値 (逆方向計測値)
-            logger.warning('unknown SEOJ or ESV : ' + dataframe.seoj + ',' + dataframe.esv)
-            logger.warning(dataframe.endict())
+            logger.debug('unknown SEOJ or ESV : ' + dataframe.seoj + ',' + dataframe.esv)
+            logger.debug(dataframe.endict())
 
     def _term( self ):
         self.wisundev.term()
@@ -1494,7 +1494,7 @@ class BrouteReader ( Worker ):
                     # 要求するデータのリストについて、定期的に値要求する
                     if now - req['lasttime'] > req['cycle']:
                         cmd = DataFrame.cmd_get_property(req['epc'])
-                        logger.warning('EPC request: epc=%s', ','.join(req['epc']))
+                        logger.debug('EPC request: epc=%s', ','.join(req['epc']))
                         res = self._sendto(cmd)
                         if req['lasttime'] == 0:
                             req['lasttime'] = now
@@ -1511,9 +1511,9 @@ class BrouteReader ( Worker ):
                     now = datetime.datetime.now().timestamp()
                     self.lasttime_receive = now
                     try:
-                        logger.warning('EPC response: seoj=%s esv=%s epc=%s', dataframe.seoj, dataframe.esv, ','.join(dataframe.properties.keys()))
+                        logger.debug('EPC response: seoj=%s esv=%s epc=%s', dataframe.seoj, dataframe.esv, ','.join(dataframe.properties.keys()))
                     except Exception:
-                        logger.warning('EPC response: seoj=%s esv=%s (failed to list epc)', dataframe.seoj, dataframe.esv)
+                        logger.debug('EPC response: seoj=%s esv=%s (failed to list epc)', dataframe.seoj, dataframe.esv)
                     self._accept(dataframe)
 
                 else:
