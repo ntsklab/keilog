@@ -544,9 +544,19 @@ class WiSunRL7023 ( WiSunDevice ):
         logger.debug(scanresult)
         if {'Pan ID','Channel','Addr'} <= scanresult.keys():
             # スキャン結果に必要な情報が含まれている場合
+            cache_data = {}
+            if os.path.exists('scancache.json'):
+                try:
+                    with open('scancache.json', 'r') as f:
+                        loaded = json.load(f)
+                        if isinstance(loaded, dict):
+                            cache_data = loaded
+                except Exception:
+                    cache_data = {}
+            cache_data.update(scanresult)
             with open("scancache.json", 'w') as f:
-                # スキャン結果のキャッシュへの書込み
-                json.dump(scanresult, f, indent=4)
+                # スキャン結果のキャッシュへの書込み（他キャッシュ情報は保持）
+                json.dump(cache_data, f, indent=4)
             return scanresult
 
         else:
@@ -1088,6 +1098,7 @@ class BrouteReader ( Worker ):
             req['epc'] = [str(epc).upper() for epc in req.get('epc', [])]
             req['lasttime'] = 0
         self.requests = requests
+        self._load_request_profile_cache()
         #self.wisundev = WiSunRL7023DSS( port, baudrate )
         self.wisundev = wisundev
 
@@ -1236,6 +1247,128 @@ class BrouteReader ( Worker ):
             return None
         return info.get('name')
 
+    def _normalize_requests(self, requests):
+        normalized = []
+        for req in requests:
+            if not isinstance(req, dict):
+                continue
+            epcs = [str(epc).upper() for epc in req.get('epc', [])]
+            epcs = [epc for epc in epcs if len(epc) == 2 and all(ch in '0123456789ABCDEF' for ch in epc)]
+            if not epcs:
+                continue
+            cycle = req.get('cycle', 0)
+            try:
+                cycle = int(cycle)
+            except Exception:
+                continue
+            if cycle <= 0:
+                continue
+            normalized.append({
+                'epc': epcs,
+                'cycle': cycle,
+                'lasttime': float(req.get('lasttime', 0) or 0),
+            })
+        return normalized
+
+    def _load_request_profile_cache(self):
+        """scancache.json から自動分割後の requests プロファイルを復元する。"""
+        if not os.path.exists('scancache.json'):
+            return
+        try:
+            with open('scancache.json', 'r') as f:
+                cache = json.load(f)
+            cached_requests = cache.get('broute_requests_profile')
+            if not isinstance(cached_requests, list):
+                return
+            normalized = self._normalize_requests(cached_requests)
+            if normalized:
+                self.requests = normalized
+                logger.info('loaded request profile cache: %s', ' | '.join(['%s@%s' % (','.join(r['epc']), r['cycle']) for r in self.requests]))
+        except Exception:
+            pass
+
+    def _save_request_profile_cache(self):
+        """自動分割後の requests プロファイルを scancache.json に保存する。"""
+        try:
+            cache = {}
+            if os.path.exists('scancache.json'):
+                try:
+                    with open('scancache.json', 'r') as f:
+                        loaded = json.load(f)
+                        if isinstance(loaded, dict):
+                            cache = loaded
+                except Exception:
+                    cache = {}
+
+            cache['broute_requests_profile'] = [
+                {
+                    'epc': list(req.get('epc', [])),
+                    'cycle': int(req.get('cycle', 0)),
+                }
+                for req in self.requests
+            ]
+
+            with open('scancache.json', 'w') as f:
+                json.dump(cache, f, indent=4)
+        except Exception:
+            logger.exception('failed to save request profile cache')
+
+    def _auto_split_requests_for_get_sna(self, sna_epcs):
+        """Get_SNA になったEPCを含む複数EPC要求を、自動で単一EPC要求へ分割する。"""
+        if not sna_epcs:
+            return
+
+        sna_set = set([str(epc).upper() for epc in sna_epcs])
+        new_requests = []
+        changed = False
+
+        for req in self.requests:
+            req_epcs = [str(epc).upper() for epc in req.get('epc', [])]
+            overlap = [epc for epc in req_epcs if epc in sna_set]
+
+            # 複数EPC要求の中でGet_SNAになったEPCがある場合のみ分割
+            if overlap and len(req_epcs) > 1:
+                remain = [epc for epc in req_epcs if epc not in overlap]
+                if remain:
+                    new_requests.append({
+                        'epc': remain,
+                        'cycle': req['cycle'],
+                        'lasttime': req.get('lasttime', 0),
+                    })
+
+                for epc in overlap:
+                    new_requests.append({
+                        'epc': [epc],
+                        'cycle': req['cycle'],
+                        'lasttime': 0,
+                    })
+
+                changed = True
+            else:
+                new_requests.append(req)
+
+        if not changed:
+            return
+
+        # 重複リクエストを除去
+        unique_requests = []
+        seen = set()
+        for req in new_requests:
+            key = (tuple(req.get('epc', [])), int(req.get('cycle', 0)))
+            if key in seen:
+                continue
+            seen.add(key)
+            unique_requests.append(req)
+
+        self.requests = unique_requests
+        self._save_request_profile_cache()
+        logger.warning('auto-split requests by Get_SNA: epc=%s', ','.join(sorted(sna_set)))
+        try:
+            req_desc = ['%s@%s' % (','.join(r.get('epc', [])), r.get('cycle')) for r in self.requests]
+            logger.warning('requests after split: %s', ' | '.join(req_desc))
+        except Exception:
+            pass
+
     def _accept( self, dataframe ):
         """受信した電文を受け付ける処理"""
 
@@ -1276,13 +1409,21 @@ class BrouteReader ( Worker ):
                 byte_val = int(rawdata[2 + byte_idx * 2: 2 + byte_idx * 2 + 2], 16)
                 for bit in range(8):
                     if byte_val & (1 << bit):
-                        epc = 0x80 + byte_idx * 8 + bit
+                        epc = 0x80 + bit * 16 + byte_idx
                         epc_list.append('{:02X}'.format(epc))
             return epc_list
 
         seoj = dataframe.seoj
         esv = dataframe.esv
-        if seoj == '028801' and esv in ['72','73']:
+        if seoj == '028801' and esv in ['72', '73', '52']:
+            if esv == '52':
+                sna_epcs = [epc.upper() for epc in dataframe.properties.keys()]
+                logger.warning('Get_SNA received: epc=%s', ','.join(sna_epcs))
+                self._auto_split_requests_for_get_sna(sna_epcs)
+                for epc in sna_epcs:
+                    self._record(epc + '_ERR', 'GET_SNA')
+                return
+
             # 送信元が '028801'（スマートメーター）で ESV が 72（プロパティ値要求の応答）
             for epc, edt in dataframe.properties.items():
                 epc_name = self._epc_name(epc)
