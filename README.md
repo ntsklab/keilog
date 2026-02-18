@@ -71,6 +71,7 @@ cp .env.example .env
 - `BROUTE_REQUESTS`（JSON形式で取得EPCと周期を定義）
 - `BROUTE_RECORD_RAW_EPC`（`true` で受信EPCのRAW値を `EPC_RAW` センサーとして記録）
 - `UPLOAD_TARGET_URL`, `UPLOAD_KEY`
+- `LOGLEVEL`（`NORM`/`DEBUG`。未設定時は従来の `DEBUG` 環境変数を参照）
 
 （Bルートのみ記録する構成）
 ```python
@@ -167,9 +168,10 @@ $ python3 kei.py
 ログについては、
 
 ```sh
-$ DEBUG=0 python3 kei.py
+$ LOGLEVEL=NORM python3 kei.py
 ```
-のように起動すると、ログレベル = DEBUG となりログの出力先が標準出力になります。
+のように起動すると、ログレベル = INFO となりログの出力先が標準出力になります。
+`LOGLEVEL=DEBUG` にするとデバッグログを出力します。
 ログレベルは USR1 シグナルを受け取ると INFO <-> DEBUG で反転します。
 
 プログラムの終了については、HUP, INT, TERM シグナルによって各オブジェクトにストップイベントを送っています。

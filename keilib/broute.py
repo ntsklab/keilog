@@ -1031,6 +1031,13 @@ class BrouteReader ( Worker ):
 
         self.record_que = record_que
         self.record_raw_epc = record_raw_epc
+        if self.record_que is None:
+            logger.warning('record queue is None')
+        else:
+            try:
+                logger.warning('record queue id=%s maxsize=%s', id(self.record_que), self.record_que.maxsize)
+            except Exception:
+                logger.warning('record queue id=%s', id(self.record_que))
         self.broute_id = broute_id
         self.broute_pwd = broute_pwd
         if not requests:
@@ -1068,6 +1075,7 @@ class BrouteReader ( Worker ):
         self.lasttime_rejoin = 0
         self.lasttime_erxudp = 0
         self.lasttime_receive = 0
+        self._last_record_log = 0
 
     def _open( self ):
         """デバイスのシリアルポートをopenする"""
@@ -1170,6 +1178,14 @@ class BrouteReader ( Worker ):
             return
         try:
             self.record_que.put(['BR', sensor, value, dataid], block=False)
+            now = time.time()
+            if now - self._last_record_log >= 60:
+                try:
+                    qsize = self.record_que.qsize()
+                except Exception:
+                    qsize = -1
+                logger.warning('record enqueue ok: sensor=%s qsize=%s', sensor, qsize)
+                self._last_record_log = now
         except queue.Full:
             logger.error('record queue is full, drop data: sensor=%s dataid=%s', sensor, dataid)
 
@@ -1365,6 +1381,7 @@ class BrouteReader ( Worker ):
                     # 要求するデータのリストについて、定期的に値要求する
                     if now - req['lasttime'] > req['cycle']:
                         cmd = DataFrame.cmd_get_property(req['epc'])
+                        logger.warning('EPC request: epc=%s', ','.join(req['epc']))
                         res = self._sendto(cmd)
                         if req['lasttime'] == 0:
                             req['lasttime'] = now
@@ -1380,6 +1397,10 @@ class BrouteReader ( Worker ):
                 if dataframe:
                     now = datetime.datetime.now().timestamp()
                     self.lasttime_receive = now
+                    try:
+                        logger.warning('EPC response: seoj=%s esv=%s epc=%s', dataframe.seoj, dataframe.esv, ','.join(dataframe.properties.keys()))
+                    except Exception:
+                        logger.warning('EPC response: seoj=%s esv=%s (failed to list epc)', dataframe.seoj, dataframe.esv)
                     self._accept(dataframe)
 
                 else:

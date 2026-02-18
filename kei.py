@@ -22,17 +22,20 @@ import keiconf
 # （設定ファイルをインポートする）
 worker_def = keiconf.worker_def
 
-# If the environment variable DEBUG is defined, specify DEBUG as the log level.
-# DEBUG 環境変数が定義されていたらログレベルをDEBUGとする
-if 'DEBUG' in os.environ:
-    debug = os.environ['DEBUG']
-else:
-    debug = 0
+# If LOGLEVEL is set, use it. Otherwise, fall back to legacy DEBUG env.
+# LOGLEVEL: NORM/DEBUG
+log_level_name = os.getenv('LOGLEVEL')
 
 # Preparing log files（ログファイルの準備）
 fname = os.path.basename(__file__).split('.')
 
-if debug:
+if log_level_name:
+    log_level_name = log_level_name.strip().upper()
+    if log_level_name == 'DEBUG':
+        LOGLEVEL = logging.DEBUG
+    else:
+        LOGLEVEL = logging.INFO
+elif 'DEBUG' in os.environ:
     LOGLEVEL = logging.DEBUG
 else:
     LOGLEVEL = logging.INFO

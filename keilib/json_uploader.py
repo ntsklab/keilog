@@ -9,6 +9,8 @@ import threading
 import requests
 import json
 import queue
+import time
+from datetime import datetime
 from keilib.worker import Worker
 from logging import getLogger
 
@@ -33,52 +35,106 @@ class JsonHttpUploader(Worker):
         self.upload_que = upload_que
         self.target_url = target_url
         self.timeout = timeout
+        self.session = requests.Session()
+
+    def _normalize_value(self, value):
+        if isinstance(value, bool):
+            return int(value)
+        if isinstance(value, (int, float)):
+            return value
+        try:
+            return float(value)
+        except Exception:
+            return str(value)
+
+    def _normalize_timestamp(self, timestamp):
+        if timestamp is None:
+            return datetime.now().strftime('%Y/%m/%d %H:%M:%S')
+        return str(timestamp)
+
+    def _short_text(self, text, limit=300):
+        if text is None:
+            return ''
+        s = str(text)
+        if len(s) <= limit:
+            return s
+        return s[:limit] + '...(truncated)'
+
+    def _log_http_request(self, method, url, payload):
+        logger.debug('[HTTP REQUEST] %s %s', method, url)
+        logger.debug('[HTTP REQUEST] payload=%s', self._short_text(json.dumps(payload, ensure_ascii=False)))
+
+    def _log_http_response(self, method, url, response):
+        elapsed_sec = None
+        try:
+            elapsed_sec = response.elapsed.total_seconds()
+        except Exception:
+            elapsed_sec = None
+
+        if elapsed_sec is None:
+            logger.debug('[HTTP RESPONSE] %s %s status=%d', method, url, response.status_code)
+        else:
+            logger.debug('[HTTP RESPONSE] %s %s status=%d elapsed=%.3fs', method, url, response.status_code, elapsed_sec)
+
+        logger.debug('[HTTP RESPONSE] body=%s', self._short_text(response.text))
 
     def run(self):
         logger.info('[JsonHttpUploader START] target: %s', self.target_url)
+        try:
+            logger.debug('[HTTP QUEUE] id=%s maxsize=%s', id(self.upload_que), self.upload_que.maxsize)
+        except Exception:
+            logger.debug('[HTTP QUEUE] id=%s', id(self.upload_que))
+        last_empty_log = 0
+        last_activity = time.time()
         
         while not self.stopEvent.is_set():
             # get data from upload_que（queueからデータの取得）
             try:
                 data = self.upload_que.get(timeout=self.timeout)
             except queue.Empty:
+                now = time.time()
+                if now - last_empty_log >= 60:
+                    try:
+                        qsize = self.upload_que.qsize()
+                    except Exception:
+                        qsize = -1
+                    logger.debug('[HTTP QUEUE] empty for %.0fs qsize=%s', now - last_activity, qsize)
+                    last_empty_log = now
                 continue
             except Exception as e:
                 logger.error('Queue get error: %s', e)
                 continue
 
-            logger.debug('Received data from queue: %s', data)
+            last_activity = time.time()
+            logger.debug('[HTTP QUEUE] received item: %s', self._short_text(data))
 
             # データフォーマット変換
             # keilog record format: [unit, sensor, value, dataid] (no timestamp)
             # 例: ['BR', 'E7', 524, 'X']
             try:
-                from datetime import datetime, timezone
-                
                 if len(data) == 4:
                     # Format: [unit, sensor, value, dataid]
-                    # Use UTC timestamp for InfluxDB
                     payload = {
-                        "Timestamp": datetime.now(timezone.utc).strftime('%Y/%m/%d %H:%M:%S'),
-                        "UnitID": data[0],         # "BR"
-                        "SensorID": data[1],       # "E7", "E0", etc.
-                        "Value": float(data[2]),   # 数値に変換
-                        "DataID": data[3]          # "X"
+                        "Timestamp": self._normalize_timestamp(None),
+                        "UnitID": str(data[0]),
+                        "SensorID": str(data[1]),
+                        "Value": self._normalize_value(data[2]),
+                        "DataID": str(data[3])
                     }
                 elif len(data) == 5:
                     # Format: [timestamp, unit, sensor, value, dataid]
                     payload = {
-                        "Timestamp": data[0],      # "2026/01/16 12:34:56"
-                        "UnitID": data[1],         # "BR"
-                        "SensorID": data[2],       # "E7", "E0", etc.
-                        "Value": float(data[3]),   # 数値に変換
-                        "DataID": data[4]          # "x"
+                        "Timestamp": self._normalize_timestamp(data[0]),
+                        "UnitID": str(data[1]),
+                        "SensorID": str(data[2]),
+                        "Value": self._normalize_value(data[3]),
+                        "DataID": str(data[4])
                     }
                 else:
                     logger.warning('Invalid data format (expected 4 or 5 elements): %s', data)
                     continue
 
-            except (ValueError, IndexError) as e:
+            except (ValueError, IndexError, TypeError) as e:
                 logger.error('Data conversion error: %s, data: %s', e, data)
                 continue
             except Exception as e:
@@ -88,22 +144,27 @@ class JsonHttpUploader(Worker):
             logger.debug('Prepared payload: %s', payload)
 
             # POST実行
+            response = None
             try:
-                response = requests.post(
+                self._log_http_request('POST', self.target_url, payload)
+                response = self.session.post(
                     self.target_url,
                     json=payload,
-                    headers={'Content-Type': 'application/json'},
                     timeout=5
                 )
-                
+                self._log_http_response('POST', self.target_url, response)
+
                 if response.status_code in [200, 204]:
                     logger.info('POST success: SensorID=%s Value=%s', payload['SensorID'], payload['Value'])
                 else:
-                    logger.warning('POST failed: status=%d, response=%s', 
-                                   response.status_code, response.text)
-                    
-            except requests.exceptions.RequestException as e:
-                logger.error('POST error to %s: %s', self.target_url, e)
-                continue
+                    logger.warning('POST failed: status=%d', response.status_code)
 
+            except Exception as e:
+                logger.exception('POST error to %s: %s', self.target_url, e)
+                continue
+            finally:
+                if response is not None:
+                    response.close()
+
+        self.session.close()
         logger.info('[JsonHttpUploader STOP]')
