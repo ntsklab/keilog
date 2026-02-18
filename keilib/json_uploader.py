@@ -48,9 +48,14 @@ class JsonHttpUploader(Worker):
             return str(value)
 
     def _normalize_timestamp(self, timestamp):
+        local_tz = datetime.now().astimezone().tzinfo
         if timestamp is None:
-            return datetime.now().strftime('%Y/%m/%d %H:%M:%S')
-        return str(timestamp)
+            return datetime.now().astimezone().isoformat(timespec="seconds")
+        try:
+            dt = datetime.strptime(str(timestamp), "%Y/%m/%d %H:%M:%S")
+            return dt.replace(tzinfo=local_tz).isoformat(timespec="seconds")
+        except Exception:
+            return str(timestamp)
 
     def _short_text(self, text, limit=300):
         if text is None:
