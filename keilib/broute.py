@@ -1168,7 +1168,10 @@ class BrouteReader ( Worker ):
     def _record(self, sensor, value, dataid='X'):
         if self.record_que is None:
             return
-        self.record_que.put(['BR', sensor, value, dataid])
+        try:
+            self.record_que.put(['BR', sensor, value, dataid], block=False)
+        except queue.Full:
+            logger.error('record queue is full, drop data: sensor=%s dataid=%s', sensor, dataid)
 
     def _record_raw_epc_value(self, epc, edt):
         if self.record_raw_epc:
